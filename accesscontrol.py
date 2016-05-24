@@ -46,7 +46,7 @@ def stopLoop(sig, frame):
 
 def main():
     global continueLoop
-    print "Hello World"
+    print "Starting..."
     #Check for SIGINT
     signal.signal(signal.SIGINT, stopLoop)
     #instantiate card reader
@@ -60,15 +60,19 @@ def main():
         (status,TagType) = reader.MFRC522_Request(reader.PICC_REQALL)
         if status ==reader.MI_OK:
             selectLED(YELLOW_LED)
-            print "Card found"
+            print "Reading Card:"
+            (status, uid) =  reader.MFRC522_Anticoll()
+            if status ==reader.MI_OK:
+                print "UID: " + str(hex(uid[0]))+" "+str(hex(uid[1]))+" "+str(hex(uid[2]))+" "+str(hex(uid[3]))
+            else:
+                print "failed"
         elif status == 1:
             selectLED(GREEN_LED)
         else:
             selectLED(RED_LED)
         
-        (status, uid) =  reader.MFRC522_Anticoll()
-        if status ==reader.MI_OK:
-            print "UID: " + str(hex(uid[0]))+" "+str(hex(uid[1]))+" "+str(hex(uid[2]))+" "+str(hex(uid[3]))
+        #Adding this allows continuous reading without error
+        (status,TagType) = reader.MFRC522_Request(reader.PICC_HALT)
 
 
 main()

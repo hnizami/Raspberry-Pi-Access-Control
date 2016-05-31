@@ -112,7 +112,7 @@ def main():
                         uidlist = open(filename, "a+")
                 line = uidlist.readline()
                 while line != "":
-                    if line.strip() == uidToStr(curUID):
+                    if  uidToStr(curUID) in line.strip():
                         selectLED([GREEN_LED])
                         auth = True
                         break
@@ -136,8 +136,12 @@ def main():
                     line = uidlist.readline()
                     
                 if line == "":
-                    uidlist.write(uidToStr(curUID) + "\n")
+                    uidlist.write(uidToStr(curUID) + ", ")
                     GPIO.output(GREEN_LED, 1)
+                    firstName = raw_input("New user's first name: ")
+                    lastName = raw_input("New user's last name: ")
+                    uidlist.write(firstName + ", " + lastName + "\n")
+                    
                     time.sleep(1)
                 uidlist.close()
         if auth:

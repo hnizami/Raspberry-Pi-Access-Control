@@ -130,7 +130,7 @@ def main():
                     line = " "
                     
                 while line != "":
-                    if line.strip() == uidToStr(curUID):
+                    if uidToStr(curUID) in line.strip():
                         #print "exists!"
                         break
                     line = uidlist.readline()

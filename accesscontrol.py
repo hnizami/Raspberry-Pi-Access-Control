@@ -13,12 +13,13 @@ import signal
 import time
 
 #GPIO constants
-GREEN_LED = 11
+GREEN_LED = 13
 YELLOW_LED = 12
-RED_LED = 13
-ORANGE_LED = 16
-ENROL_BUTT = 15
+RED_LED = 11
+ORANGE_LED = 15
+ENROL_BUTT = 16
 RELAY = 18
+BUZZER = 7
 
 filename = "userlist"
 

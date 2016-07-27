@@ -1,16 +1,10 @@
-#!/usr/bin/python
-##
-##Name:       accesscontrol
-##Purpose:    Read RFID card from RC522 module.
-##
-##Author:     Husain Nizami
-##Created:    2016-05-24
-##
-
 import RPi.GPIO as GPIO
 import MFRC522
 import signal
 import time
+
+#loop booleans
+continueLoop = True
 
 #GPIO constants
 GREEN_LED = 13
@@ -23,37 +17,30 @@ BUZZER = 7
 
 filename = "userlist"
 
-#loop boolean
-continueLoop = True
-
 #instantiate card reader
 reader = MFRC522.MFRC522()
-
-#instantiate file
-#uidlist = open(filename, "a+", 1) #line buffered
 
 #initialize GPIO
 def initGPIO():
     GPIO.setmode(GPIO.BOARD)
-    GPIO.setup(ENROL_BUTT, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    #GPIO.setup(ENROL_BUTT, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.setup(GREEN_LED, GPIO.OUT)
     GPIO.setup(YELLOW_LED, GPIO.OUT)
     GPIO.setup(RED_LED, GPIO.OUT)
     GPIO.setup(ORANGE_LED, GPIO.OUT)
     GPIO.setup(RELAY, GPIO.OUT)
+    GPIO.setup(BUZZER, GPIO.OUT)
             
 #turn on a specific LED, turn others off
 def selectLED(led):
-    GPIO.setmode(GPIO.BOARD)
     GPIO.output(GREEN_LED, 0)
     GPIO.output(YELLOW_LED, 0)
     GPIO.output(RED_LED, 0)
-    #GPIO.output(ORANGE_LED, 0)
+    GPIO.output(ORANGE_LED, 0)
     for i in range(0, len(led)):
         GPIO.output(led[i], 1)
     time.sleep(.01)
-
-    
+   
 #handler function for signal.signal
 def stopLoop(sig, frame):
     global continueLoop
@@ -87,73 +74,102 @@ def readCard():
     #Adding this allows continuous reading without error
     (status,TagType) = reader.MFRC522_Request(reader.PICC_HALT)
     return uidOut
-        
 
+def validateCard(curUID):
+    uidlist = open(filename, "r")
+    line = uidlist.readline()
+    while line != "":                           #read until EOF
+        if  curUID in line.strip():             #check for matching entry
+            uidlist.close()
+            selectLED([GREEN_LED])
+            return True
+        line = uidlist.readline()               #read next line
+    uidlist.close()
+    return False
+    
 def main():
+    print "main"
+    #loop booleans
     global continueLoop
-    global uidlist
-    print "Starting..."
-    #Check for SIGINT
+    prevPresent = False
+    auth = False
+    #signal handler call
     signal.signal(signal.SIGINT, stopLoop)
     #initialize GPIO
     initGPIO()
-    selectLED([RED_LED])     
-
+    selectLED([RED_LED])
+    GPIO.output(RELAY, 1)
+    GPIO.output(BUZZER, 0)
+    while True:
+        try:
+            uidlist = open(filename, "r") #line buffered
+            break
+        except IOError:
+            uidlist = open(filename, "a+")
+            uidlist.close()
+    uidlist.close()
     while continueLoop:
-        auth = False
-        curUID = readCard()
-        if GPIO.input(ENROL_BUTT):  #not enroling
-            GPIO.output(ORANGE_LED, 0)
-            if len(curUID) > 2:
-                while True:
-                    try:
-                        uidlist = open(filename, "r") #line buffered
-                        break
-                    except IOError:
-                        uidlist = open(filename, "a+")
-                line = uidlist.readline()
-                while line != "":
-                    if  uidToStr(curUID) in line.strip():
-                        selectLED([GREEN_LED])
+        if prevPresent:
+            UID = readCard()
+            if len(UID) > 2:
+                if auth:
+                    if uidToStr(UID) in currUID:
                         auth = True
-                        break
-                    line = uidlist.readline()
-                if line == "":
+                    else:
+                        auth = False
+            else:
+                if auth:
+                    timeRemoved = time.time()
+                    auth = False
+                    prevPresent = False
+                    timeElapsed = time.time() - timeRemoved
+                    while (timeElapsed) <= 10:
+                        UID = readCard()
+                        if len(UID) > 2:
+                            if uidToStr(UID) in currUID:
+                                selectLED([GREEN_LED])
+                                auth = True
+                                prevPresent = True
+                                break
+                            else:
+                                selectLED([RED_LED,ORANGE_LED])
+                        if timeElapsed < 2:
+                            GPIO.output(BUZZER, 1)
+                        elif timeElapsed > 7:
+                            if int(timeElapsed * 4) % 2 == 1:
+                                GPIO.output(BUZZER, 0)
+                            else:
+                                GPIO.output(BUZZER, 1)
+                        else:
+                            GPIO.output(BUZZER, 0)
+                        timeElapsed = time.time() - timeRemoved
+                    GPIO.output(BUZZER, 0)
+                    
+                else:
+                    prevPresent = False
+        else:
+            UID = readCard()
+            if len(UID) > 2:
+                currUID = uidToStr(UID)
+                prevPresent = True
+                if validateCard(currUID):
+                    auth = True
+                    selectLED([GREEN_LED])
+                    time.sleep(2)
+                    #print to log [084]
+                else:
+                    auth = False
                     selectLED([YELLOW_LED])
-
-        else:                       #enroling
-            GPIO.output(ORANGE_LED, 1)
-            if len(curUID) > 2:
-                uidlist = open(filename, "a+", 1) #line buffered
-                line = uidlist.readline()
-                if line == "":
-                    uidlist.write("Beginning of File: \n")
-                    line = " "
-                    
-                while line != "":
-                    if uidToStr(curUID) in line.strip():
-                        #print "exists!"
-                        break
-                    line = uidlist.readline()
-                    
-                if line == "":
-                    uidlist.write(uidToStr(curUID) + ", ")
-                    GPIO.output(GREEN_LED, 1)
-                    firstName = raw_input("New user's first name: ")
-                    lastName = raw_input("New user's last name: ")
-                    uidlist.write(firstName + ", " + lastName + "\n")
-                    
-                    time.sleep(1)
-                uidlist.close()
+            else:
+                print "no card"
+                #no card
+                
         if auth:
             GPIO.output(RELAY, 0) #Relay ON
             #print "ON"
         else:
-            GPIO.output(RELAY, 1) #Relay ON
+            GPIO.output(RELAY, 1) #Relay OFF
             #print "OFF"
-            
-
 
 main()
 GPIO.cleanup()
-

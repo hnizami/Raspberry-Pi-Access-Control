@@ -15,7 +15,10 @@ ENROL_BUTT = 16
 RELAY = 18
 BUZZER = 7
 
-filename = "userlist"
+filepath = "/home/pi/RFID/Raspberry-Pi-Access-Control/"
+filename = filepath + "userlist"
+logname = filepath + "usage.log"
+beatname = filepath + "heartbeat.log"
 
 #instantiate card reader
 reader = MFRC522.MFRC522()
@@ -88,11 +91,12 @@ def validateCard(curUID):
     return False
     
 def main():
-    print "main"
+    #print "main"
     #loop booleans
     global continueLoop
     prevPresent = False
     auth = False
+    present = False
     #signal handler call
     signal.signal(signal.SIGINT, stopLoop)
     #initialize GPIO
@@ -108,30 +112,49 @@ def main():
             uidlist = open(filename, "a+")
             uidlist.close()
     uidlist.close()
+
+#logfile
+    logfile = open(logname, "a+", 1)
+    line = logfile.readline()
+    if line =="":
+        logfile.write("Start of log:\n")
+        line = " "
+    while line != "":
+        line = logfile.readline()
+    logfile.write("\nAccesscontrol Started: "+ time.strftime("%Y-%m-%d, %H:%M:%S") + "\n")
+
+#heartbeat
+    heartfile = open(beatname, "a+", 1)
+    lastbeat = time.time()
+    heartfile.write(time.strftime("%Y-%m-%d, %H:%M:%S")+"\n")
+
+
     while continueLoop:
         if prevPresent:
             UID = readCard()
-            if len(UID) > 2:
+            if len(UID) > 2:    #card present
                 if auth:
                     if uidToStr(UID) in currUID:
+                        present = True
                         auth = True
                     else:
+                        present = False
                         auth = False
-            else:
+            else:               #card absent
                 if auth:
                     timeRemoved = time.time()
                     auth = False
-                    prevPresent = False
+                    present = False
                     timeElapsed = time.time() - timeRemoved
                     while (timeElapsed) <= 10:
                         UID = readCard()
                         if len(UID) > 2:
-                            if uidToStr(UID) in currUID:
+                            if uidToStr(UID) in currUID: #correct card
                                 selectLED([GREEN_LED])
                                 auth = True
-                                prevPresent = True
+                                present = True
                                 break
-                            else:
+                            else:                       #incorrect card
                                 selectLED([RED_LED,ORANGE_LED])
                         if timeElapsed < 2:
                             GPIO.output(BUZZER, 1)
@@ -146,30 +169,39 @@ def main():
                     GPIO.output(BUZZER, 0)
                     
                 else:
-                    prevPresent = False
-        else:
+                    present = False
+        else:   #Prev Absent
             UID = readCard()
-            if len(UID) > 2:
+            if len(UID) > 2: #currently present
                 currUID = uidToStr(UID)
-                prevPresent = True
-                if validateCard(currUID):
+                present = True
+                if validateCard(currUID):   #valid card
                     auth = True
                     selectLED([GREEN_LED])
-                    time.sleep(2)
+                    time.sleep(0.25)
                     #print to log [084]
-                else:
+                else:                       #invalid card
                     auth = False
                     selectLED([YELLOW_LED])
-            else:
-                print "no card"
+            #else:
+                #print "no card"
                 #no card
-                
-        if auth:
-            GPIO.output(RELAY, 0) #Relay ON
-            #print "ON"
-        else:
-            GPIO.output(RELAY, 1) #Relay OFF
-            #print "OFF"
-
+        if prevPresent != present:
+            if auth:
+                GPIO.output(RELAY, 0) #Relay ON
+                logfile.write("Printer Started: "+ time.strftime("%Y-%m-%d, %H:%M:%S"))
+                #print "ON"
+            else:
+                GPIO.output(RELAY, 1) #Relay OFF
+                logfile.write(", Printer Stopped: "+ time.strftime("%Y-%m-%d, %H:%M:%S") + "\n")
+                #print "OFF"
+            prevPresent = present
+        time.sleep(.1)
+        if (time.time() - lastbeat > 59.5):
+            lastbeat = time.time()
+            heartfile.write(time.strftime("%Y-%m-%d, %H:%M:%S")+"\n")
+    logfile.close()
+    heartfile.close()
 main()
 GPIO.cleanup()
+
